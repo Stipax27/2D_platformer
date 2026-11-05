@@ -14,12 +14,23 @@ struct sprite {
     int frameTick;
 
     bool faceLeft = false;
+
+    DWORD lastFrameTime = 0;   // когда последний раз менялся кадр
+    DWORD lastAttackTime = 0;  // когда последний раз нажимали ЛКМ
+    int   attackFrame = 0;
+
+    int HP;
+
 } ;
 
+DWORD CurrentTime =0;
 sprite knite;//ракетка игрока
 //sprite enemy;//ракетка противника
 sprite ball;//шарик
 sprite platform;
+sprite attack;
+sprite fire;
+sprite Zombi;
 
 float gravity = 5;
 
@@ -36,31 +47,71 @@ struct {
 
 HBITMAP hBack;// хэндл для фонового изображения
 HBITMAP knightRunFrames[3];
-//cекция кода
+HBITMAP knightAttackFrames[3];
+HBITMAP fireFrames[5];
+HBITMAP ZombiFrames[8];
 
-void InitAnimation(sprite& s, HBITMAP* frames, int frameCount, int frameDelay)
+
+bool AttackOn = false;
+//cекция кода
+int stepAttack = 0;
+
+void InitAnimation(sprite& object, HBITMAP* frames, int frameCount, int frameDelay)
 {
-    s.frames = frames;
-    s.frameCount = frameCount;
-    s.currentFrame = 0;
-    s.frameDelay = frameDelay;
-    s.frameTick = 0;
-    s.hBitmap = frames[0];
+    object.frames = frames;
+    object.frameCount = frameCount;
+    object.currentFrame = 0;
+    object.frameDelay = frameDelay;
+    object.frameTick = 0;
+    object.hBitmap = frames[0];
 }
 
-void UpdateAnimation(sprite& s)
+void UpdateAnimation(sprite& object)
 {
-    if (s.frameCount <= 0) return;
+   
+    if (object.frameCount <= 0) return;
 
-    s.frameTick++;
-    if (s.frameTick >= s.frameDelay)
+    object.frameTick++;
+    if (object.frameTick >= object.frameDelay)
     {
-        s.frameTick = 0;
-        s.currentFrame++;
-        if (s.currentFrame >= s.frameCount)
-            s.currentFrame = 0;
+        object.frameTick = 0;
+        object.currentFrame++;
+        if (object.currentFrame >= object.frameCount)
+            object.currentFrame = 0;
 
-        s.hBitmap = s.frames[s.currentFrame];
+        object.hBitmap = object.frames[object.currentFrame];
+    }
+
+}
+
+void UpdateAttackAnimation(sprite& object, bool mouseDown)
+{
+    if (object.frameCount <= 0) return;
+
+    // Если ЛКМ нажата — запоминаем время и запускаем/продолжаем анимацию
+    if (mouseDown)
+    {
+        object.lastAttackTime = CurrentTime;
+
+        // Смена кадра раз в 150 мс
+        if (CurrentTime - object.lastFrameTime >= 150)
+        {
+            object.lastFrameTime = CurrentTime;
+            object.hBitmap = object.frames[object.attackFrame];
+            object.attackFrame++;
+            if (object.attackFrame >= object.frameCount)
+                object.attackFrame = 0;   // либо оставить на последнем — см. ниже
+        }
+    }
+    else
+    {
+        // ЛКМ отпущена: если прошло больше 500 мс — сброс на первый кадр
+        if (CurrentTime - object.lastAttackTime >= 500)
+        {
+            object.attackFrame = 0;
+            object.lastFrameTime = 0;
+            object.hBitmap = object.frames[0];
+        }
     }
 }
 
@@ -71,7 +122,10 @@ void InitGame()
     //результат работы LoadImageA сохраняет в хэндлах битмапов, рисование спрайтов будет произовдиться с помощью этих хэндлов
     ball.hBitmap = (HBITMAP)LoadImageA(NULL, "ball.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     knite.hBitmap = (HBITMAP)LoadImageA(NULL, "Ходьба_рыцарь.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	attack.hBitmap = (HBITMAP)LoadImageA(NULL, "Разрез1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     platform.hBitmap = (HBITMAP)LoadImageA(NULL, "Платформа_1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	fire.hBitmap = (HBITMAP)LoadImageA(NULL, "Магия Огня1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	Zombi.hBitmap = (HBITMAP)LoadImageA(NULL, "Зомби.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     //enemy.hBitmap = (HBITMAP)LoadImageA(NULL, "racket_enemy.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     hBack = (HBITMAP)LoadImageA(NULL, "Деревня.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     //------------------------------------------------------
@@ -90,6 +144,49 @@ void InitGame()
 
     InitAnimation(knite, knightRunFrames, 3, 5);
 
+
+	attack.x = knite.x + knite.width/2;
+	attack.y = knite.y - knite.height/2;
+	attack.width = 130;
+	attack.height = 180;
+    attack.vy = 0;
+
+    knightAttackFrames[0] = (HBITMAP)LoadImageA(NULL, "Разрез1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    knightAttackFrames[1] = (HBITMAP)LoadImageA(NULL, "Разрез2.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    knightAttackFrames[2] = (HBITMAP)LoadImageA(NULL, "Разрез3.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+
+    InitAnimation(attack, knightAttackFrames, 3, 15);
+
+
+	fire.width = 130;
+	fire.height = 180;  
+	fire.x = knite.x + knite.width;
+	fire.y = knite.y - knite.height / 2;
+
+    fireFrames[0] = (HBITMAP)LoadImageA(NULL, "Магия Огня1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    fireFrames[1] = (HBITMAP)LoadImageA(NULL, "Магия Огня2.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    fireFrames[2] = (HBITMAP)LoadImageA(NULL, "Магия Огня3.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    fireFrames[3] = (HBITMAP)LoadImageA(NULL, "Магия Огня4.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    fireFrames[4] = (HBITMAP)LoadImageA(NULL, "Магия Огня5.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+
+    InitAnimation(fire, fireFrames, 5, 10);
+
+	Zombi.width = 130;
+	Zombi.height = 180;
+    Zombi.x = 100;
+	Zombi.y = window.height - Zombi.height - 80;
+    Zombi.HP = 10;
+
+	ZombiFrames[0] = (HBITMAP)LoadImageA(NULL, "Зомби.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	ZombiFrames[1] = (HBITMAP)LoadImageA(NULL, "Зомби2.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    ZombiFrames[2] = (HBITMAP)LoadImageA(NULL, "Зомби3.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    ZombiFrames[3] = (HBITMAP)LoadImageA(NULL, "Зомби4.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    ZombiFrames[4] = (HBITMAP)LoadImageA(NULL, "Зомби5.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    ZombiFrames[5] = (HBITMAP)LoadImageA(NULL, "Зомби6.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    ZombiFrames[6] = (HBITMAP)LoadImageA(NULL, "Зомби7.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    
+
+    InitAnimation(Zombi, ZombiFrames, 7, 5);
     //enemy.x = knite.x;//х координату оппонета ставим в ту же точку что и игрока
 
     platform.width = 300;
@@ -102,8 +199,6 @@ void InitGame()
 
    
 }
-
-
 
 void ProcessSound(const char* name)//проигрывание аудиофайла в формате .wav, файл должен лежать в той же папке где и программа
 {
@@ -133,13 +228,13 @@ void ProcessInput()
 {
     bool moving = false;
 
-    if (GetAsyncKeyState(VK_LEFT))
+    if (GetAsyncKeyState('A'))
     {
         knite.x -= knite.speed;
         moving = true;
     }
 
-    if (GetAsyncKeyState(VK_RIGHT))
+    if (GetAsyncKeyState('D'))
     {
         knite.x += knite.speed;
         moving = true;
@@ -154,18 +249,53 @@ void ProcessInput()
         knite.hBitmap = knite.frames[0];
     }
 
-    if (GetAsyncKeyState(VK_LEFT))
+    if (GetAsyncKeyState('A'))
         knite.faceLeft = true;
-    if (GetAsyncKeyState(VK_RIGHT))
+    if (GetAsyncKeyState('D'))
         knite.faceLeft = false;
 
-    if (knite.onGround && GetAsyncKeyState(VK_UP))
+    if (knite.onGround && GetAsyncKeyState('W'))
     {
         knite.vy = -20;
         knite.onGround = false;
     }
 
-    
+    bool mouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    AttackOn = mouseDown;
+
+    if (mouseDown)
+    {
+        // если это ПЕРВОЕ нажатие (анимация не шла) — стартуем с нуля
+        if (CurrentTime - attack.lastAttackTime > 500)
+        {
+            attack.attackFrame = 0;
+            attack.lastFrameTime = CurrentTime - 150; // чтобы первый кадр показался сразу
+            attack.hBitmap = attack.frames[0];
+        }
+    }
+
+    // Анимация крутится/сбрасывается независимо от ЛКМ
+    UpdateAttackAnimation(attack, mouseDown);
+
+    // Позиция атаки привязана к рыцарю ВСЕГДА, пока атака видима
+    // (пока нажата ЛКМ или пока не истекли 500 мс после отпускания)
+    if (AttackOn || (CurrentTime - attack.lastAttackTime < 500))
+    {
+        attack.x = knite.faceLeft ? knite.x - knite.width * 1.5f
+            : knite.x + knite.width / 2;
+        attack.y = knite.y;
+        attack.faceLeft = knite.faceLeft;
+    }
+
+    if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
+
+        fire.x = knite.faceLeft ? knite.x - knite.width*2
+            : knite.x + knite.width;
+        fire.y = knite.y;
+        fire.faceLeft = knite.faceLeft;
+
+    }
+        UpdateAnimation(fire);
 }
 
 void ShowBitmap(HDC hDC, int x, int y, int x1, int y1, HBITMAP hBitmapBall, bool alpha = false, bool mirrorX = false)
@@ -213,8 +343,23 @@ void ShowBitmap(HDC hDC, int x, int y, int x1, int y1, HBITMAP hBitmapBall, bool
 void ShowRacketAndBall()
 {
     ShowBitmap(window.context, 0, 0, window.width, window.height, hBack);//задний фон
+    if (fire.currentFrame < 4)
+    {
+        ShowBitmap(window.context, fire.x, fire.y, fire.width, fire.height, fire.hBitmap, false, fire.faceLeft);
+
+    }
     ShowBitmap(window.context, knite.x - knite.width / 2., knite.y, knite.width, knite.height, knite.hBitmap, false, knite.faceLeft);
- 
+
+    if (AttackOn || (CurrentTime - attack.lastAttackTime < 500))
+    {
+        ShowBitmap(window.context, attack.x, attack.y,attack.width, attack.height,attack.hBitmap, false, attack.faceLeft);
+    }
+
+    if (Zombi.HP>0)
+    {
+
+	    ShowBitmap(window.context, Zombi.x, Zombi.y, Zombi.width, Zombi.height, Zombi.hBitmap, false, Zombi.faceLeft);
+    }
     //if (ball.dy < 0 && (enemy.x - knite.width / 4 > ball.x || ball.x > enemy.x + knite.width / 4))
     //{
     //    //имитируем разумность оппонента. на самом деле, компьютер никогда не проигрывает, и мы не считаем попадает ли его ракетка по шарику
@@ -230,6 +375,26 @@ void ShowRacketAndBall()
     //ShowBitmap(window.context, ball.x - ball.rad, ball.y - ball.rad, 2 * ball.rad, 2 * ball.rad, ball.hBitmap, true);// шарик
 }
 
+
+void CheckKniteAttackCollision()
+{
+	if (AttackOn || (CurrentTime - attack.lastAttackTime < 500))
+	{
+		// Проверяем пересечение прямоугольников атаки и зомби
+		if (attack.x < Zombi.x + Zombi.width &&
+			attack.x + attack.width > Zombi.x &&
+			attack.y < Zombi.y + Zombi.height &&
+			attack.y + attack.height > Zombi.y)
+		{
+
+            Zombi.HP -= 1;
+			// Коллизия произошла
+			// Здесь можно добавить логику обработки коллизии, например, уменьшение здоровья зомби
+			//ProcessSound("hit.wav"); // Проигрываем звук удара
+			//OutputDebugStringA(Zombi.HP);
+		}
+	}
+}
 void LimitRacket()
 {
     knite.x = max(knite.x, knite.width / 2.);//если коодината левого угла ракетки меньше нуля, присвоим ей ноль
@@ -287,13 +452,31 @@ void ProcessKnightPhysics()
 
     CheckKnightFloorAndRoof();
 }
-
+void UpdateZombiAnimation()
+{
+	UpdateAnimation(Zombi);
+	// Логика движения зомби
+   
+	if (Zombi.x > knite.x)
+	{
+		Zombi.x -= 10; // Двигаемся вправо
+		Zombi.faceLeft = false;
+	}
+	else if (Zombi.x < knite.x)
+	{
+		Zombi.x += 10; // Двигаемся влево
+		Zombi.faceLeft = true;
+	}
+    
+}
 void ProcessRoom()
 {
     //обрабатываем стены, потолок и пол. принцип - угол падения равен углу отражения, а значит, для отскока мы можем просто инвертировать часть вектора движения шарика
     CheckWalls();
     CheckRoof();
     CheckFloor();
+    UpdateZombiAnimation();
+    CheckKniteAttackCollision();
 }
 
 void ProcessBall()
@@ -339,8 +522,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     //mciSendString(TEXT("play ..\\Debug\\music.mp3 repeat"), NULL, 0, NULL);
     ShowCursor(NULL);
     
+    timeBeginPeriod(1);
     while (!GetAsyncKeyState(VK_ESCAPE))
     {
+
+        CurrentTime = timeGetTime();
+
         ProcessKnightPhysics();
 
         ShowRacketAndBall();//рисуем фон, ракетку и шарик
